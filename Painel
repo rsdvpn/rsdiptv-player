@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador de Links M3U8</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Arial', sans-serif;
+        }
+
+        body {
+            background-color: #121212;
+            color: #f0f0f0;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #00ccff;
+        }
+
+        .section {
+            background-color: #1e1e1e;
+            padding: 25px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        input, button {
+            padding: 12px 15px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            margin: 5px;
+        }
+
+        input {
+            background-color: #2d2d2d;
+            color: white;
+            flex: 1;
+            min-width: 250px;
+        }
+
+        button {
+            background-color: #00ccff;
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background-color: #0099cc;
+        }
+
+        .btn-danger {
+            background-color: #ff4444;
+        }
+
+        .btn-danger:hover {
+            background-color: #cc0000;
+        }
+
+        .form-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .link-item {
+            background-color: #2d2d2d;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .link-url {
+            flex: 1;
+            word-break: break-all;
+            color: #b3e5fc;
+            font-size: 14px;
+        }
+
+        .player-container {
+            margin-top: 15px;
+            background-color: #000;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        video {
+            width: 100%;
+            height: auto;
+            max-height: 400px;
+            display: block;
+        }
+
+        .status {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .status.success {
+            background-color: #004d40;
+            color: #e0f2f1;
+            display: block;
+        }
+
+        .status.error {
+            background-color: #b71c1c;
+            color: #ffebee;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>📺 Gerenciador de Links M3U8</h1>
+
+    <!-- Seção Adicionar Link -->
+    <div class="section">
+        <h2>Adicionar Novo Link</h2>
+        <div class="form-group">
+            <input type="text" id="linkNome" placeholder="Nome do canal/stream">
+            <input type="url" id="linkUrl" placeholder="URL do link M3U8">
+            <button onclick="adicionarLink()">Salvar Link</button>
+        </div>
+    </div>
+
+    <!-- Seção Lista de Links -->
+    <div class="section">
+        <h2>Meus Links</h2>
+        <div id="listaLinks"></div>
+    </div>
+
+    <!-- Seção Reprodutor -->
+    <div class="section">
+        <h2>Reprodutor</h2>
+        <div class="player-container">
+            <video id="videoPlayer" controls></video>
+        </div>
+        <div id="statusPlayer" class="status"></div>
+    </div>
+
+    <script>
+        let listaLinks = JSON.parse(localStorage.getItem('linksM3U8')) || [];
+        const video = document.getElementById('videoPlayer');
+        const statusPlayer = document.getElementById('statusPlayer');
+        let hls = null;
+
+        // Carregar links salvos ao abrir a página
+        document.addEventListener('DOMContentLoaded', () => {
+            renderizarLista();
+        });
+
+        // Adicionar novo link
+        function adicionarLink() {
+            const nome = document.getElementById('linkNome').value.trim();
+            const url = document.getElementById('linkUrl').value.trim();
+
+            if (!nome || !url) {
+                mostrarStatus('Preencha todos os campos!', 'error');
+                return;
+            }
+
+            if (!url.includes('.m3u8')) {
+                mostrarStatus('O link precisa ser um endereço M3U8 válido', 'error');
+                return;
+            }
+
+            listaLinks.push({ id: Date.now(), nome, url });
+            salvarLinks();
+            renderizarLista();
+            document.getElementById('linkNome').value = '';
+            document.getElementById('linkUrl').value = '';
+            mostrarStatus('Link adicionado com sucesso!', 'success');
+        }
+
+        // Renderizar lista de links
+        function renderizarLista() {
+            const container = document.getElementById('listaLinks');
+            container.innerHTML = '';
+
+            if (listaLinks.length === 0) {
+                container.innerHTML = '<p style="color:#999">Nenhum link salvo ainda.</p>';
+                return;
+            }
+
+            listaLinks.forEach(link => {
+                const item = document.createElement('div');
+                item.className = 'link-item';
+                item.innerHTML = `
+                    <div>
+                        <h4>${link.nome}</h4>
+                        <div class="link-url">${link.url}</div>
+                    </div>
+                    <div>
+                        <button onclick="reproduzirLink('${link.url}')">▶ Reproduzir</button>
+                        <button class="btn-danger" onclick="excluirLink(${link.id})">🗑 Excluir</button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        // Reproduzir link M3U8
+        function reproduzirLink(url) {
+            statusPlayer.className = 'status';
+            statusPlayer.textContent = '';
+
+            // Parar reprodução anterior
+            if (hls) {
+                hls.destroy();
+                hls = null;
+            }
+
+            if (Hls.isSupported()) {
+                hls = new Hls();
+                hls.loadSource(url);
+                hls.attachMedia(video);
+
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play();
+                    mostrarStatus('Reproduzindo...', 'success');
+                });
+
+                hls.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        mostrarStatus('Erro ao carregar stream: link inválido ou indisponível', 'error');
+                        hls.destroy();
+                    }
+                });
+
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                // Suporte nativo para Safari
+                video.src = url;
+                video.addEventListener('loadedmetadata', () => {
+                    video.play();
+                    mostrarStatus('Reproduzindo...', 'success');
+                });
+                video.addEventListener('error', () => {
+                    mostrarStatus('Erro ao carregar stream', 'error');
+                });
+            } else {
+                mostrarStatus('Seu navegador não suporta reprodução M3U8', 'error');
+            }
+        }
+
+        // Excluir link
+        function excluirLink(id) {
+            listaLinks = listaLinks.filter(link => link.id !== id);
+            salvarLinks();
+            renderizarLista();
+            mostrarStatus('Link excluído!', 'success');
+        }
+
+        // Salvar no armazenamento local
+        function salvarLinks() {
+            localStorage.setItem('linksM3U8', JSON.stringify(listaLinks));
+        }
+
+        // Mostrar mensagens
+        function mostrarStatus(mensagem, tipo) {
+            statusPlayer.textContent = mensagem;
+            statusPlayer.className = `status ${tipo}`;
+            setTimeout(() => {
+                statusPlayer.className = 'status';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
